@@ -1,0 +1,9 @@
+crewai
+crewai-tools
+python-dotenv
+pymupdf
+unstructured
+sentence-transformers
+transformers
+config_loader
+-e .
