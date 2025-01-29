@@ -7,6 +7,6 @@ class LLMSetup:
     def get_llm():
         """Configure and return the LLM instance"""
         return LLM(
-            model="gemini/gemini-2.0-flash-thinking-exp-01-21",
+            model="groq/llama-3.3-70b-versatile",
             temperature=0.7
         )
