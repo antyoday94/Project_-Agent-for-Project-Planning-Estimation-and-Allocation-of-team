@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Planning Agent Interface</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .output-area {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+        .output-area h2 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+        #logsContainer, #resultContainer {
+            white-space: pre-wrap; /* Preserve whitespace and newlines */
+            word-wrap: break-word; /* Break long words */
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Project Planning Agent</h1>
+        <form id="projectForm">
+            <label for="project">Project Name/Type:</label>
+            <input type="text" id="project" name="project" required>
+
+            <label for="industry">Industry:</label>
+            <input type="text" id="industry" name="industry" required>
+
+            <label for="project_objectives">Project Objectives:</label>
+            <textarea id="project_objectives" name="project_objectives" required></textarea>
+
+            <label for="team_members">Team Members (one per line or comma-separated):</label>
+            <textarea id="team_members" name="team_members" required></textarea>
+
+            <label for="project_requirements">Project Requirements:</label>
+            <textarea id="project_requirements" name="project_requirements" required></textarea>
+
+            <button type="submit">Generate Project Plan</button>
+        </form>
+
+        <div class="output-area" id="logsArea" style="display:none;">
+            <h2>Logs:</h2>
+            <div id="logsContainer"></div>
+        </div>
+
+        <div class="output-area" id="resultArea" style="display:none;">
+            <h2>Result:</h2>
+            <div id="resultContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('projectForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const formData = {
+                project: document.getElementById('project').value,
+                industry: document.getElementById('industry').value,
+                project_objectives: document.getElementById('project_objectives').value,
+                team_members: document.getElementById('team_members').value,
+                project_requirements: document.getElementById('project_requirements').value
+            };
+
+            const logsContainer = document.getElementById('logsContainer');
+            const resultContainer = document.getElementById('resultContainer');
+            const logsArea = document.getElementById('logsArea');
+            const resultArea = document.getElementById('resultArea');
+
+            logsContainer.innerHTML = ''; // Clear previous logs
+            resultContainer.innerHTML = ''; // Clear previous result
+            logsArea.style.display = 'block'; // Show logs area
+            resultArea.style.display = 'none'; // Hide result area until finished
+
+            try {
+                const response = await fetch('http://localhost:8000/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        break;
+                    }
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    // SSE messages are separated by double newlines.
+                    // A single chunk might contain multiple messages or partial messages.
+                    const messages = chunk.split('\n\n');
+
+                    for (const message of messages) {
+                        if (message.startsWith('data: ')) {
+                            const jsonString = message.substring(6);
+                            if (jsonString.trim()) { // Ensure not empty
+                                try {
+                                    const data = JSON.parse(jsonString);
+                                    if (data.type === 'log') {
+                                        logsContainer.innerHTML += data.data + '\n';
+                                        logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+                                    } else if (data.type === 'result') {
+                                        resultContainer.innerHTML = JSON.stringify(data.data, null, 2);
+                                        resultArea.style.display = 'block'; // Show result area
+                                        // Optionally stop reading further if result is final
+                                        // reader.cancel();
+                                        // return;
+                                    } else if (data.type === 'error') {
+                                        logsContainer.innerHTML += 'Error: ' + data.data + '\n';
+                                        logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+                                        resultArea.style.display = 'none';
+                                        // Optionally stop reading further on error
+                                        // reader.cancel();
+                                        // return;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing JSON from stream:', e, jsonString);
+                                    logsContainer.innerHTML += 'Error parsing stream data.\n';
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching stream:', error);
+                logsContainer.innerHTML = `Error connecting to the backend or processing the request: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
