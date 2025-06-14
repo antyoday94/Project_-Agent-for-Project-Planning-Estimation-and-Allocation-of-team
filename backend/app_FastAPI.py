@@ -18,19 +18,13 @@ os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 litellm.drop_params = True
 litellm.ssl_verify = False
 
-# Add src directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add backend directory to path to allow "from src import..."
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-try:
-    from config_loader import ConfigLoader
-    from llm_setup import LLMSetup
-    from crew_setup import CrewSetup
-    from models import ProjectPlan
-except ImportError:
-    from src.config_loader import ConfigLoader
-    from src.llm_setup import LLMSetup
-    from src.crew_setup import CrewSetup
-    from src.models import ProjectPlan
+from src.config_loader import ConfigLoader
+from src.llm_setup import LLMSetup
+from src.crew_setup import CrewSetup
+from src.models import ProjectPlan
 
 app = FastAPI()
 
